@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { Lock, LogOut, Pencil, Plus, Save, Trash2, X } from 'lucide-react'
+import { Lock, LogOut, Pencil, Plus, RefreshCw, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, createStaffClient, getApiErrorMessage, STAFF_TOKEN_KEY } from './api'
@@ -57,8 +57,40 @@ const emptyItem = (categorySlug: string): MenuItem => ({
   active: true,
 })
 
+type AdminStatus = {
+  database: string
+  itemCount: number
+  liveCount: number
+  hiddenCount: number
+  categoryCount: number
+}
+
 function getClient() {
   return createStaffClient()
+}
+
+function toMenuPayload(editing: MenuItem) {
+  return {
+    name: editing.name.trim(),
+    nameAm: editing.nameAm.trim(),
+    description: editing.description.trim(),
+    descriptionAm: editing.descriptionAm.trim(),
+    categorySlug: editing.categorySlug,
+    price: editing.price,
+    image: editing.image.trim(),
+    prepTime: editing.prepTime.trim(),
+    tags: editing.tags.filter(Boolean),
+    customizations: editing.customizations
+      .filter((entry) => entry.label.trim())
+      .map((entry) => ({
+        label: entry.label.trim(),
+        labelAm: entry.labelAm.trim(),
+        price: Number(entry.price) || 0,
+      })),
+    popular: editing.popular,
+    featured: editing.featured,
+    active: editing.active,
+  }
 }
 
 export default function AdminPage() {
@@ -68,7 +100,9 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
   const [items, setItems] = useState<MenuItem[]>([])
+  const [dbStatus, setDbStatus] = useState<AdminStatus | null>(null)
   const [filterCategory, setFilterCategory] = useState('all')
+  const [showHidden, setShowHidden] = useState(false)
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<MenuItem | null>(null)
   const [isNew, setIsNew] = useState(false)
@@ -81,18 +115,25 @@ export default function AdminPage() {
     setLoading(true)
     setSaveError('')
     try {
-      const [catRes, menuRes] = await Promise.all([
+      const [statusRes, catRes, menuRes] = await Promise.all([
+        staffApi.get<AdminStatus>('/api/admin/status'),
         staffApi.get<{ categories: Category[] }>('/api/admin/categories'),
         staffApi.get<{ items: MenuItem[] }>('/api/admin/menu'),
       ])
+      setDbStatus(statusRes.data)
       setCategories(catRes.data.categories)
       setItems(menuRes.data.items)
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         localStorage.removeItem(TOKEN_KEY)
         setToken(null)
+      } else if (axios.isAxiosError(error) && error.response?.status === 503) {
+        setSaveError(
+          'MongoDB not connected. Set MONGO_URI on Render (MongoDB Atlas), save, and wait for redeploy.',
+        )
+        setDbStatus(null)
       } else {
-        setSaveError('Could not load admin data. Is MongoDB connected?')
+        setSaveError(getApiErrorMessage(error, 'Could not load admin data.'))
       }
     } finally {
       setLoading(false)
@@ -106,6 +147,7 @@ export default function AdminPage() {
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase()
     return items.filter((item) => {
+      if (!showHidden && !item.active) return false
       if (filterCategory !== 'all' && item.categorySlug !== filterCategory) return false
       if (!query) return true
       return (
@@ -114,7 +156,7 @@ export default function AdminPage() {
         item.description.toLowerCase().includes(query)
       )
     })
-  }, [items, filterCategory, search])
+  }, [items, filterCategory, search, showHidden])
 
   const categoryMap = useMemo(() => new Map(categories.map((c) => [c.slug, c])), [categories])
 
@@ -168,30 +210,30 @@ export default function AdminPage() {
     setSaveMessage('')
     setSaveError('')
 
-    const payload = {
-      ...editing,
-      tags: editing.tags.filter(Boolean),
-      customizations: editing.customizations
-        .filter((entry) => entry.label.trim())
-        .map((entry) => ({
-          label: entry.label.trim(),
-          labelAm: entry.labelAm.trim(),
-          price: Number(entry.price) || 0,
-        })),
-    }
+    const payload = toMenuPayload(editing)
 
     try {
       if (isNew) {
         const response = await staffApi.post<{ item: MenuItem }>('/api/admin/menu', payload)
         setItems((current) => [...current, response.data.item])
-        setSaveMessage(`Added "${response.data.item.name}"`)
+        setSaveMessage(`Added "${response.data.item.name}" — live on customer menu.`)
+        setDbStatus((current) =>
+          current
+            ? {
+                ...current,
+                itemCount: current.itemCount + 1,
+                liveCount: payload.active ? current.liveCount + 1 : current.liveCount,
+              }
+            : current,
+        )
         closeEditor()
       } else {
         const response = await staffApi.patch<{ item: MenuItem }>(`/api/admin/menu/${editing.slug}`, payload)
         setItems((current) => current.map((item) => (item.slug === editing.slug ? response.data.item : item)))
-        setSaveMessage(`Saved "${response.data.item.name}"`)
+        setSaveMessage(`Saved "${response.data.item.name}" — live on customer menu.`)
         closeEditor()
       }
+      await loadData()
     } catch (error) {
       const message = getApiErrorMessage(error, 'Save failed.')
       setSaveError(message)
@@ -202,11 +244,40 @@ export default function AdminPage() {
     if (!window.confirm(`Hide "${item.name}" from the customer menu?`)) return
 
     try {
-      const response = await staffApi.delete<{ item: MenuItem }>(`/api/admin/menu/${item.slug}`)
+      const response = await staffApi.delete<{ item: MenuItem; message: string }>(`/api/admin/menu/${item.slug}`)
       setItems((current) => current.map((entry) => (entry.slug === item.slug ? response.data.item : entry)))
+      setSaveMessage(response.data.message)
       if (editing?.slug === item.slug) closeEditor()
-    } catch {
-      setSaveError('Could not hide item.')
+      await loadData()
+    } catch (error) {
+      setSaveError(getApiErrorMessage(error, 'Could not hide item.'))
+    }
+  }
+
+  async function handleRestore(item: MenuItem) {
+    try {
+      const response = await staffApi.post<{ item: MenuItem; message: string }>(
+        `/api/admin/menu/${item.slug}/restore`,
+      )
+      setItems((current) => current.map((entry) => (entry.slug === item.slug ? response.data.item : entry)))
+      setSaveMessage(response.data.message)
+      await loadData()
+    } catch (error) {
+      setSaveError(getApiErrorMessage(error, 'Could not restore item.'))
+    }
+  }
+
+  async function handlePermanentDelete(item: MenuItem) {
+    if (!window.confirm(`Permanently delete "${item.name}"? This cannot be undone.`)) return
+
+    try {
+      await staffApi.delete(`/api/admin/menu/${item.slug}?permanent=true`)
+      setItems((current) => current.filter((entry) => entry.slug !== item.slug))
+      setSaveMessage(`"${item.name}" permanently deleted.`)
+      if (editing?.slug === item.slug) closeEditor()
+      await loadData()
+    } catch (error) {
+      setSaveError(getApiErrorMessage(error, 'Could not delete item.'))
     }
   }
 
@@ -214,8 +285,9 @@ export default function AdminPage() {
     try {
       const response = await staffApi.patch<{ item: MenuItem }>(`/api/admin/menu/${item.slug}`, { price })
       setItems((current) => current.map((entry) => (entry.slug === item.slug ? response.data.item : entry)))
-    } catch {
-      setSaveError(`Could not update price for ${item.name}.`)
+      setSaveMessage(`Price updated for "${item.name}" — ${price} birr`)
+    } catch (error) {
+      setSaveError(getApiErrorMessage(error, `Could not update price for ${item.name}.`))
     }
   }
 
@@ -253,13 +325,31 @@ export default function AdminPage() {
       <header className="admin-header">
         <div>
           <h1>Menu Admin</h1>
-          <p>Changes save to MongoDB and appear on the customer menu immediately.</p>
+          <p>
+            {dbStatus
+              ? `${dbStatus.liveCount} live items · ${dbStatus.hiddenCount} hidden · MongoDB connected`
+              : 'Changes save to MongoDB and appear on the customer menu immediately.'}
+          </p>
         </div>
-        <button type="button" className="admin-btn admin-btn-ghost" onClick={handleLogout}>
-          <LogOut size={16} />
-          Log out
-        </button>
+        <div className="admin-header-actions">
+          <button type="button" className="admin-btn admin-btn-ghost" onClick={() => loadData()}>
+            <RefreshCw size={16} className={loading ? 'admin-spin' : ''} />
+            Refresh
+          </button>
+          <button type="button" className="admin-btn admin-btn-ghost" onClick={handleLogout}>
+            <LogOut size={16} />
+            Log out
+          </button>
+        </div>
       </header>
+
+      {dbStatus ? (
+        <p className="admin-db-banner admin-db-banner-ok">Database connected — edits save permanently.</p>
+      ) : (
+        <p className="admin-db-banner admin-db-banner-warn">
+          MongoDB not connected. Set MONGO_URI on Render, then refresh this page.
+        </p>
+      )}
 
       <div className="admin-toolbar">
         <input
@@ -277,7 +367,15 @@ export default function AdminPage() {
             </option>
           ))}
         </select>
-        <button type="button" className="admin-btn admin-btn-primary" onClick={openNewItem}>
+        <label className="admin-check-inline">
+          <input
+            type="checkbox"
+            checked={showHidden}
+            onChange={(event) => setShowHidden(event.target.checked)}
+          />
+          Show hidden
+        </label>
+        <button type="button" className="admin-btn admin-btn-primary" onClick={openNewItem} disabled={!dbStatus}>
           <Plus size={16} />
           Add item
         </button>
@@ -309,6 +407,7 @@ export default function AdminPage() {
                   <td>{categoryMap.get(item.categorySlug)?.name ?? item.categorySlug}</td>
                   <td>
                     <input
+                      key={`${item.slug}-${item.price}`}
                       type="number"
                       className="admin-price-input"
                       defaultValue={item.price}
@@ -332,10 +431,24 @@ export default function AdminPage() {
                       <Pencil size={16} />
                     </button>
                     {item.active ? (
-                      <button type="button" className="admin-icon-btn" onClick={() => handleHide(item)} title="Hide">
+                      <button type="button" className="admin-icon-btn" onClick={() => handleHide(item)} title="Hide from menu">
                         <Trash2 size={16} />
                       </button>
-                    ) : null}
+                    ) : (
+                      <>
+                        <button type="button" className="admin-icon-btn" onClick={() => handleRestore(item)} title="Restore">
+                          <RotateCcw size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-icon-btn admin-icon-btn-danger"
+                          onClick={() => handlePermanentDelete(item)}
+                          title="Delete permanently"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -407,6 +520,16 @@ export default function AdminPage() {
                   rows={3}
                   value={editing.description}
                   onChange={(event) => updateEditing('description', event.target.value)}
+                />
+              </label>
+
+              <label>
+                Description (Amharic)
+                <textarea
+                  rows={2}
+                  value={editing.descriptionAm}
+                  onChange={(event) => updateEditing('descriptionAm', event.target.value)}
+                  placeholder="Optional"
                 />
               </label>
 
@@ -523,6 +646,23 @@ export default function AdminPage() {
               </div>
 
               {saveError ? <p className="admin-error">{saveError}</p> : null}
+
+              {!isNew && !editing.active ? (
+                <div className="admin-form-actions">
+                  <button type="button" className="admin-btn admin-btn-primary" onClick={() => handleRestore(editing)}>
+                    <RotateCcw size={16} />
+                    Restore to menu
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-danger"
+                    onClick={() => handlePermanentDelete(editing)}
+                  >
+                    <Trash2 size={16} />
+                    Delete permanently
+                  </button>
+                </div>
+              ) : null}
 
               <div className="admin-form-actions">
                 <button type="submit" className="admin-btn admin-btn-primary">

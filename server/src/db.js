@@ -3,20 +3,23 @@ const mongoose = require('mongoose')
 let isConnected = false
 
 async function connectDB() {
-  const uri = process.env.MONGO_URI
+  const uri = process.env.MONGO_URI?.trim()
   if (!uri) {
     console.log('MONGO_URI not set — using in-memory seed file fallback.')
     return false
   }
 
   try {
-    await mongoose.connect(uri)
+    await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 15_000,
+    })
     isConnected = true
     console.log('MongoDB connected.')
     return true
   } catch (error) {
     console.error('MongoDB connection failed — using seed file fallback.')
     console.error(error.message)
+    isConnected = false
     return false
   }
 }

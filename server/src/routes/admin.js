@@ -65,6 +65,28 @@ router.post('/login', (req, res) => {
 router.use(requireAdmin)
 router.use(requireDatabase)
 
+router.get('/status', async (_req, res) => {
+  try {
+    const [itemCount, liveCount, hiddenCount, categoryCount] = await Promise.all([
+      MenuItem.countDocuments(),
+      MenuItem.countDocuments({ active: true }),
+      MenuItem.countDocuments({ active: false }),
+      Category.countDocuments({ active: true }),
+    ])
+
+    res.json({
+      database: 'connected',
+      itemCount,
+      liveCount,
+      hiddenCount,
+      categoryCount,
+    })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ message: 'Failed to load admin status.' })
+  }
+})
+
 router.get('/categories', async (_req, res) => {
   try {
     const docs = await Category.find().sort({ sortOrder: 1, name: 1 }).lean()
@@ -276,7 +298,15 @@ router.patch('/menu/:slug', async (req, res) => {
 })
 
 router.delete('/menu/:slug', async (req, res) => {
+  const permanent = req.query.permanent === 'true'
+
   try {
+    if (permanent) {
+      const doc = await MenuItem.findOneAndDelete({ slug: req.params.slug }).lean()
+      if (!doc) return res.status(404).json({ message: 'Menu item not found.' })
+      return res.json({ message: `"${doc.name}" permanently deleted.`, slug: doc.slug })
+    }
+
     const doc = await MenuItem.findOneAndUpdate(
       { slug: req.params.slug },
       { active: false },
@@ -284,10 +314,26 @@ router.delete('/menu/:slug', async (req, res) => {
     ).lean()
 
     if (!doc) return res.status(404).json({ message: 'Menu item not found.' })
-    res.json({ item: mapAdminMenuItem(doc), message: 'Item hidden from menu.' })
+    res.json({ item: mapAdminMenuItem(doc), message: 'Item hidden from customer menu.' })
   } catch (error) {
     console.error(error)
     res.status(500).json({ message: 'Failed to remove menu item.' })
+  }
+})
+
+router.post('/menu/:slug/restore', async (req, res) => {
+  try {
+    const doc = await MenuItem.findOneAndUpdate(
+      { slug: req.params.slug },
+      { active: true },
+      { new: true, runValidators: true },
+    ).lean()
+
+    if (!doc) return res.status(404).json({ message: 'Menu item not found.' })
+    res.json({ item: mapAdminMenuItem(doc), message: 'Item restored to customer menu.' })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ message: 'Failed to restore menu item.' })
   }
 })
 

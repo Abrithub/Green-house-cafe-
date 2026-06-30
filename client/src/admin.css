@@ -74,6 +74,66 @@
   margin: 0 auto 24px;
 }
 
+.admin-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-db-banner {
+  max-width: 1200px;
+  margin: 0 auto 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.admin-db-banner-ok {
+  background: rgba(233, 245, 229, 0.95);
+  color: #1b5e20;
+}
+
+.admin-db-banner-warn {
+  background: rgba(255, 243, 224, 0.95);
+  color: #e65100;
+}
+
+.admin-check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f0f7f0;
+  font-weight: 600;
+}
+
+.admin-check-inline input {
+  width: auto;
+}
+
+.admin-btn-danger {
+  background: #c62828;
+  color: #fff;
+}
+
+.admin-icon-btn-danger {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.admin-spin {
+  animation: admin-spin 0.8s linear infinite;
+}
+
+@keyframes admin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .admin-toolbar {
   display: flex;
   flex-wrap: wrap;
