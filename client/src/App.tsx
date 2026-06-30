@@ -140,6 +140,7 @@ function MenuApp() {
   const [searchParams] = useSearchParams()
   const tableNumber = searchParams.get('table')
   const [data, setData] = useState<ApiPayload | null>(null)
+  const [loadError, setLoadError] = useState('')
   const [cart, setCart] = useState<CartLine[]>([])
   const [favorites, setFavorites] = useState<string[]>([])
   const [language, setLanguage] = useState<'EN' | 'AM'>('EN')
@@ -151,13 +152,23 @@ function MenuApp() {
 
   useEffect(() => {
     const loadData = async () => {
+      setLoadError('')
       const query = tableNumber ? `?table=${tableNumber}` : ''
       const response = await api.get<ApiPayload>(`/api/bootstrap${query}`)
+      if (!response.data?.items || !response.data?.categories) {
+        throw new Error('Invalid menu response from server.')
+      }
       setData(response.data)
     }
 
     loadData().catch((error) => {
       console.error('Failed to load menu data', error)
+      setLoadError(
+        getApiErrorMessage(
+          error,
+          'Cannot reach the menu server. Deploy the API on Render and set VITE_API_URL on Vercel, then redeploy.',
+        ),
+      )
     })
   }, [tableNumber])
 
@@ -206,8 +217,21 @@ function MenuApp() {
         <div className="phone-frame">
           <div className="loading-state">
             <Leaf size={34} />
-            <h1>Preparing the Green House menu</h1>
-            <p>Loading the cafe experience...</p>
+            <h1>{loadError ? 'Could not load menu' : 'Preparing the Green House menu'}</h1>
+            <p>
+              {loadError ||
+                'Loading the cafe experience...'}
+            </p>
+            {loadError ? (
+              <button
+                type="button"
+                className="primary-button"
+                style={{ marginTop: 16 }}
+                onClick={() => window.location.reload()}
+              >
+                Try again
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
