@@ -26,6 +26,21 @@ app.use(
 )
 app.use(express.json())
 
+app.get('/', (_req, res) => {
+  res.json({
+    name: 'Green House API',
+    status: 'ok',
+    message: 'This is the backend API. Open the customer menu on Vercel, not here.',
+    frontend: process.env.CLIENT_URL || 'https://green-house-cafe.vercel.app',
+    endpoints: {
+      health: '/api/health',
+      menu: '/api/bootstrap?table=7',
+      admin: '/api/admin/login',
+      kitchen: '/api/kitchen/orders',
+    },
+  })
+})
+
 app.use('/api/admin', adminRouter)
 app.use('/api/kitchen', kitchenRouter)
 app.use('/api', apiRouter)
