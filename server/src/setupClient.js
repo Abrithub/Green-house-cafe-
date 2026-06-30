@@ -52,6 +52,19 @@ function getAllowedOrigins() {
   return [...new Set([...configured, ...(platformUrl ? [platformUrl] : []), ...defaults])]
 }
 
+function isAllowedOrigin(origin) {
+  if (!origin) return true
+
+  const allowed = getAllowedOrigins()
+  if (allowed.includes(origin)) return true
+
+  if (process.env.ALLOW_VERCEL_PREVIEWS === 'true' && /\.vercel\.app$/i.test(origin)) {
+    return true
+  }
+
+  return false
+}
+
 function getPublicUrl() {
   return (
     normalizeOrigin(process.env.PUBLIC_URL) ||
@@ -65,5 +78,6 @@ module.exports = {
   setupClient,
   getAllowedOrigins,
   getPublicUrl,
+  isAllowedOrigin,
   shouldServeClient,
 }

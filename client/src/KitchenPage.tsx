@@ -2,9 +2,10 @@ import axios from 'axios'
 import { Bell, BellOff, ChefHat, Clock3, LogOut, RefreshCw } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { api, createStaffClient, STAFF_TOKEN_KEY } from './api'
 import './kitchen.css'
 
-const TOKEN_KEY = 'gh-admin-token'
+const TOKEN_KEY = STAFF_TOKEN_KEY
 const POLL_MS = 5000
 
 type OrderLine = {
@@ -40,10 +41,7 @@ const COLUMNS: StatusColumn[] = [
 ]
 
 function getClient() {
-  const token = localStorage.getItem(TOKEN_KEY)
-  return axios.create({
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
+  return createStaffClient()
 }
 
 function formatAgo(value: string) {
@@ -86,7 +84,7 @@ export default function KitchenPage() {
   const knownOrderIds = useRef<Set<string>>(new Set())
   const hasLoadedOnce = useRef(false)
 
-  const api = useMemo(() => getClient(), [token])
+  const staffApi = useMemo(() => getClient(), [token])
 
   const loadOrders = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -96,7 +94,7 @@ export default function KitchenPage() {
       setError('')
 
       try {
-        const response = await api.get<{ orders: KitchenOrder[] }>('/api/kitchen/orders')
+        const response = await staffApi.get<{ orders: KitchenOrder[] }>('/api/kitchen/orders')
         const nextOrders = response.data.orders
 
         if (hasLoadedOnce.current && soundOn) {
@@ -124,7 +122,7 @@ export default function KitchenPage() {
         if (!options?.silent) setLoading(false)
       }
     },
-    [api, soundOn, token],
+    [staffApi, soundOn, token],
   )
 
   useEffect(() => {
@@ -151,7 +149,7 @@ export default function KitchenPage() {
     event.preventDefault()
     setLoginError('')
     try {
-      const response = await axios.post<{ token: string }>('/api/kitchen/login', { password })
+      const response = await api.post<{ token: string }>('/api/kitchen/login', { password })
       localStorage.setItem(TOKEN_KEY, response.data.token)
       setToken(response.data.token)
       setPassword('')
@@ -173,7 +171,7 @@ export default function KitchenPage() {
   async function advanceStatus(order: KitchenOrder, nextStatus: KitchenOrder['status']) {
     setError('')
     try {
-      const response = await api.patch<{ order: KitchenOrder }>(`/api/kitchen/orders/${order.orderId}/status`, {
+      const response = await staffApi.patch<{ order: KitchenOrder }>(`/api/kitchen/orders/${order.orderId}/status`, {
         status: nextStatus,
       })
       setOrders((current) =>

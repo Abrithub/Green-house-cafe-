@@ -1,15 +1,21 @@
 services:
   - type: web
-    name: green-house-cafe
+    name: green-house-api
     runtime: node
     plan: free
-    buildCommand: npm install && npm install --prefix client && npm run build --prefix client && npm install --prefix server
-    startCommand: NODE_ENV=production npm run start --prefix server
+    buildCommand: npm install --prefix server
+    startCommand: NODE_ENV=production SERVE_CLIENT=false npm run start --prefix server
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: SERVE_CLIENT
+        value: false
+      - key: ALLOW_VERCEL_PREVIEWS
+        value: true
       - key: MONGO_URI
+        sync: false
+      - key: CLIENT_URL
         sync: false
       - key: ADMIN_PASSWORD
         generateValue: true

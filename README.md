@@ -147,40 +147,68 @@ Place a test order from the customer menu (`/?table=7`), then watch it appear on
 
 ## Deploy online (Step 4)
 
-The app runs as **one service**: Express serves the React build and the API on the same domain. That keeps QR codes simple — one URL like `https://menu.yourdomain.com/?table=7`.
+Professional setup: **Vercel (frontend)** + **Render (API)** + **MongoDB Atlas**.
 
-### What you need
+| Part | Host | Folder |
+|------|------|--------|
+| Customer menu, admin, kitchen UI | [Vercel](https://vercel.com) | `client/` |
+| Orders, menu API, auth | [Render](https://render.com) | `server/` |
+| Database | [MongoDB Atlas](https://www.mongodb.com/atlas) | — |
 
-1. **MongoDB Atlas** — free cluster ([mongodb.com/atlas](https://www.mongodb.com/atlas))
-2. **A host** — [Render](https://render.com) free tier works (see `render.yaml`)
-3. **Your domain** (optional) — e.g. `menu.greenhouse.et`
+### 1 — Deploy API on Render
 
-### Deploy on Render (recommended)
+1. [render.com](https://render.com) → **New → Blueprint** → connect [Abrithub/Green-house-cafe-](https://github.com/Abrithub/Green-house-cafe-)
+2. Set **`MONGO_URI`** (Atlas connection string)
+3. After deploy, copy your API URL — e.g. `https://green-house-api.onrender.com`
+4. In Render → **Environment**, set:
+   - `CLIENT_URL` = your Vercel URL (set after step 2)
+   - `ALLOW_VERCEL_PREVIEWS` = `true` (already in `render.yaml`)
 
-1. Push this project to GitHub
-2. In Render: **New → Blueprint** → connect the repo (`render.yaml` is included)
-3. Set **MONGO_URI** to your Atlas connection string when prompted
-4. Deploy — Render sets `RENDER_EXTERNAL_URL` automatically (e.g. `https://green-house-cafe.onrender.com`)
-5. Open the live URL and test: `/api/health`, `/?table=7`, `/admin`, `/kitchen`
+Test: `https://your-api.onrender.com/api/health`
 
-**Production env vars** (Render dashboard → Environment):
+### 2 — Deploy frontend on Vercel
 
-| Variable | Example |
-|----------|---------|
-| `MONGO_URI` | `mongodb+srv://user:pass@cluster.mongodb.net/green-house` |
-| `ADMIN_PASSWORD` | strong staff password |
-| `ADMIN_SECRET` | long random string |
-| `PUBLIC_URL` | `https://menu.yourdomain.com` (custom domain only) |
-| `CLIENT_URL` | same as `PUBLIC_URL` if you use a custom domain |
+1. [vercel.com](https://vercel.com) → **Add New → Project** → import **Abrithub/Green-house-cafe-**
+2. Set **Root Directory** = `client`
+3. Framework: **Vite** (auto-detected)
+4. Add **Environment Variable**:
 
-`NODE_ENV=production` is set automatically by `render.yaml`.
+| Name | Value |
+|------|-------|
+| `VITE_API_URL` | `https://green-house-api.onrender.com` (your Render API URL, no trailing slash) |
 
-### Custom domain
+5. Click **Deploy**
 
-1. In Render → your service → **Settings → Custom Domains**
-2. Add `menu.yourdomain.com` and follow DNS instructions
-3. Set `PUBLIC_URL` and `CLIENT_URL` to `https://menu.yourdomain.com`
-4. Regenerate QR codes (below)
+Your live app:
+- Menu: `https://your-app.vercel.app/?table=7`
+- Admin: `https://your-app.vercel.app/admin`
+- Kitchen: `https://your-app.vercel.app/kitchen`
+
+6. Go back to Render and set **`CLIENT_URL`** = `https://your-app.vercel.app`
+
+### 3 — Production QR codes
+
+```powershell
+$env:PUBLIC_URL="https://your-app.vercel.app"
+npm run qr:all
+git add client/public/qr
+git commit -m "Production QR codes"
+git push
+```
+
+Redeploy on Vercel (automatic on push). Print stands: `/qr-stand?table=7`
+
+### Local dev with production API (optional)
+
+Create `client/.env.local`:
+
+```env
+VITE_API_URL=https://green-house-api.onrender.com
+```
+
+### All-in-one Render (alternative)
+
+To host frontend + API on one Render URL, set `SERVE_CLIENT=true` and use the original full-stack `render.yaml` build. Vercel is recommended for faster global frontend delivery.
 
 ### Run production build locally
 

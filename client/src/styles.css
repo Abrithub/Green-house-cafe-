@@ -813,6 +813,16 @@ h3 {
   width: calc(100% - 36px);
 }
 
+.checkout-error {
+  margin: 0 18px 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #ffebee;
+  color: #b71c1c;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
 .empty-state,
 .loading-state,
 .success-state {

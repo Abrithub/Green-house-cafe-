@@ -2,9 +2,10 @@ import axios from 'axios'
 import { Lock, LogOut, Pencil, Plus, Save, Trash2, X } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { api, createStaffClient, getApiErrorMessage, STAFF_TOKEN_KEY } from './api'
 import './admin.css'
 
-const TOKEN_KEY = 'gh-admin-token'
+const TOKEN_KEY = STAFF_TOKEN_KEY
 
 type Category = {
   slug: string
@@ -57,10 +58,7 @@ const emptyItem = (categorySlug: string): MenuItem => ({
 })
 
 function getClient() {
-  const token = localStorage.getItem(TOKEN_KEY)
-  return axios.create({
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
+  return createStaffClient()
 }
 
 export default function AdminPage() {
@@ -77,15 +75,15 @@ export default function AdminPage() {
   const [saveMessage, setSaveMessage] = useState('')
   const [saveError, setSaveError] = useState('')
 
-  const api = useMemo(() => getClient(), [token])
+  const staffApi = useMemo(() => getClient(), [token])
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setSaveError('')
     try {
       const [catRes, menuRes] = await Promise.all([
-        api.get<{ categories: Category[] }>('/api/admin/categories'),
-        api.get<{ items: MenuItem[] }>('/api/admin/menu'),
+        staffApi.get<{ categories: Category[] }>('/api/admin/categories'),
+        staffApi.get<{ items: MenuItem[] }>('/api/admin/menu'),
       ])
       setCategories(catRes.data.categories)
       setItems(menuRes.data.items)
@@ -99,7 +97,7 @@ export default function AdminPage() {
     } finally {
       setLoading(false)
     }
-  }, [api])
+  }, [staffApi])
 
   useEffect(() => {
     if (token) loadData()
@@ -124,7 +122,7 @@ export default function AdminPage() {
     event.preventDefault()
     setLoginError('')
     try {
-      const response = await axios.post<{ token: string }>('/api/admin/login', { password })
+      const response = await api.post<{ token: string }>('/api/admin/login', { password })
       localStorage.setItem(TOKEN_KEY, response.data.token)
       setToken(response.data.token)
       setPassword('')
@@ -184,20 +182,18 @@ export default function AdminPage() {
 
     try {
       if (isNew) {
-        const response = await api.post<{ item: MenuItem }>('/api/admin/menu', payload)
+        const response = await staffApi.post<{ item: MenuItem }>('/api/admin/menu', payload)
         setItems((current) => [...current, response.data.item])
         setSaveMessage(`Added "${response.data.item.name}"`)
         closeEditor()
       } else {
-        const response = await api.patch<{ item: MenuItem }>(`/api/admin/menu/${editing.slug}`, payload)
+        const response = await staffApi.patch<{ item: MenuItem }>(`/api/admin/menu/${editing.slug}`, payload)
         setItems((current) => current.map((item) => (item.slug === editing.slug ? response.data.item : item)))
         setSaveMessage(`Saved "${response.data.item.name}"`)
         closeEditor()
       }
     } catch (error) {
-      const message = axios.isAxiosError(error)
-        ? (error.response?.data as { message?: string })?.message ?? 'Save failed.'
-        : 'Save failed.'
+      const message = getApiErrorMessage(error, 'Save failed.')
       setSaveError(message)
     }
   }
@@ -206,7 +202,7 @@ export default function AdminPage() {
     if (!window.confirm(`Hide "${item.name}" from the customer menu?`)) return
 
     try {
-      const response = await api.delete<{ item: MenuItem }>(`/api/admin/menu/${item.slug}`)
+      const response = await staffApi.delete<{ item: MenuItem }>(`/api/admin/menu/${item.slug}`)
       setItems((current) => current.map((entry) => (entry.slug === item.slug ? response.data.item : entry)))
       if (editing?.slug === item.slug) closeEditor()
     } catch {
@@ -216,7 +212,7 @@ export default function AdminPage() {
 
   async function quickPriceSave(item: MenuItem, price: number) {
     try {
-      const response = await api.patch<{ item: MenuItem }>(`/api/admin/menu/${item.slug}`, { price })
+      const response = await staffApi.patch<{ item: MenuItem }>(`/api/admin/menu/${item.slug}`, { price })
       setItems((current) => current.map((entry) => (entry.slug === item.slug ? response.data.item : entry)))
     } catch {
       setSaveError(`Could not update price for ${item.name}.`)

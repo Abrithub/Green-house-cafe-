@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import axios from 'axios'
+import { api, getApiErrorMessage } from './api'
 import {
   ArrowLeft,
   Bell,
@@ -152,7 +152,7 @@ function MenuApp() {
   useEffect(() => {
     const loadData = async () => {
       const query = tableNumber ? `?table=${tableNumber}` : ''
-      const response = await axios.get<ApiPayload>(`/api/bootstrap${query}`)
+      const response = await api.get<ApiPayload>(`/api/bootstrap${query}`)
       setData(response.data)
     }
 
@@ -690,16 +690,21 @@ function CartScreen({
   const service = subtotal * 0.08
   const total = subtotal + tax + service
 
+  const [checkoutError, setCheckoutError] = useState('')
+
   const handleCheckout = async () => {
     setSubmitting(true)
+    setCheckoutError('')
     try {
-      const response = await axios.post<OrderResponse>('/api/orders', {
+      const response = await api.post<OrderResponse>('/api/orders', {
         items: cart,
         notes,
         tableNumber,
       })
       setCart([])
       navigate(`/order-success/${response.data.orderId}`)
+    } catch (error) {
+      setCheckoutError(getApiErrorMessage(error, 'Could not place order. Is the server running?'))
     } finally {
       setSubmitting(false)
     }
@@ -764,6 +769,8 @@ function CartScreen({
             <div><span>Service charge</span><strong>{money.format(service)}</strong></div>
             <div className="bill-total"><span>Total</span><strong>{money.format(total)}</strong></div>
           </section>
+
+          {checkoutError ? <p className="checkout-error">{checkoutError}</p> : null}
 
           <button className="primary-button checkout" onClick={handleCheckout} disabled={submitting}>
             {submitting ? 'Placing order...' : 'Place Order'}
