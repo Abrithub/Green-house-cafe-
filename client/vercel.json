@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://green-house-api.onrender.com/api/:path*"
+      "destination": "https://green-house-api-mdhr.onrender.com/api/:path*"
     },
     {
       "source": "/(.*)",
