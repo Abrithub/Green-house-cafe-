@@ -62,6 +62,10 @@ function isAllowedOrigin(origin) {
     return true
   }
 
+  if (/\.vercel\.app$/i.test(origin)) {
+    return true
+  }
+
   return false
 }
 
