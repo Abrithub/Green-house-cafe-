@@ -1,0 +1,16 @@
+{
+  "name": "green-house-cafe",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "client": "npm run dev --prefix client",
+    "server": "npm run dev --prefix server",
+    "build": "npm run build --prefix client",
+    "start": "npm run start --prefix server",
+    "qr": "node scripts/generate-qr-menu.cjs --table=7",
+    "qr:all": "node scripts/generate-qr-menu.cjs --tables=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20"
+  },
+  "devDependencies": {
+    "qrcode": "^1.5.4"
+  }
+}
