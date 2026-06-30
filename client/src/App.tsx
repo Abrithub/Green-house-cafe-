@@ -166,7 +166,7 @@ function MenuApp() {
       setLoadError(
         getApiErrorMessage(
           error,
-          'Cannot reach the menu server. Deploy the API on Render and set VITE_API_URL on Vercel, then redeploy.',
+          'Cannot reach the menu server. Wait 60 seconds for Render to wake up, then tap Try again.',
         ),
       )
     })
